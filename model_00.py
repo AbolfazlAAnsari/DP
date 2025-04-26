@@ -115,8 +115,9 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
 for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
     dataset = load_dataset(f'ai4privacy/{dataset_name}')
+    # use 2000 examples for training and testeing
+    dataset = dataset['train'].shuffle(seed=42).select(range(2000))
     english_dataset = dataset['train'].filter(lambda x: x['language'] == 'en')
-
     train_test = english_dataset.train_test_split(test_size=0.1, seed=42)
     
     for model_name in model_names:
