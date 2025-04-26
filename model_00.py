@@ -90,7 +90,7 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         super().__init__(*args, **kwargs)
         self.penalty = penalty
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs['labels']
         span_labels = inputs['span_labels'].to(labels.device)
         outputs = model(
@@ -100,7 +100,6 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         )
         logits = outputs.logits
 
-        # Shift logits and labels
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
