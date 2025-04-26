@@ -25,8 +25,6 @@ datasets_info = [
     'pii-masking-400k',
     'open-pii-masking-500k-ai4privacy'
 ]
-
-# Preprocessing function
 def get_preprocessor(tokenizer):
     def preprocess(example):
         input_text = 'Mask sensitive information: ' + example['source_text']
@@ -40,7 +38,7 @@ def get_preprocessor(tokenizer):
             return_offsets_mapping=True
         )
         offset_mapping = input_enc.pop('offset_mapping')
-        
+
         target_enc = tokenizer(
             target_text,
             truncation=True,
@@ -70,7 +68,7 @@ def get_preprocessor(tokenizer):
         }
     return preprocess
 
-# Custom data collator
+# Data collator
 def custom_data_collator(features: List[Dict[str, Any]]) -> Dict[str, Any]:
     for feature in features:
         if 'span_labels' not in feature:
@@ -79,7 +77,7 @@ def custom_data_collator(features: List[Dict[str, Any]]) -> Dict[str, Any]:
     batch['span_labels'] = torch.tensor([f['span_labels'] for f in features])
     return batch
 
-# Metric function
+# Metric
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=-1)
@@ -90,9 +88,9 @@ def compute_metrics(eval_pred):
     accuracy = correct / len(decoded_preds)
     return {'accuracy': accuracy}
 
-# Custom Trainer with optional penalty
+# Custom Trainer
 class PrivacyAwareTrainer(Seq2SeqTrainer):
-    def __init__(self, penalty: bool = False, *args, **kwargs):
+    def __init__(self, penalty=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.penalty = penalty
 
@@ -106,7 +104,6 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         )
         logits = outputs.logits
 
-        # Shift logits and labels
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
@@ -125,16 +122,19 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
 
         return (final_loss, outputs) if return_outputs else final_loss
 
-# Main fine-tuning loop
+# Main loop
 for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
     dataset = load_dataset(f'ai4privacy/{dataset_name}')
     english_dataset = dataset['train'].filter(lambda x: x['language'] == 'en')
 
+    # TAKE ONLY 1000 examples
+    english_dataset = english_dataset.select(range(min(1000, len(english_dataset))))
+
     train_test = english_dataset.train_test_split(test_size=0.1, seed=42)
 
     for model_name in model_names:
-        print(f'\nFine-tuning model: {model_name} on dataset: {dataset_name}')
+        print(f'\nFine-tuning model: {model_name} on {dataset_name}')
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
@@ -147,27 +147,26 @@ for dataset_name in datasets_info:
             preprocessor, remove_columns=train_test['test'].column_names
         )
 
-        output_dir = f'./results-{dataset_name}-{model_name.replace("/", "-")}'
+        output_dir = f'./results-small-{dataset_name}-{model_name.replace("/", "-")}'
 
         training_args = Seq2SeqTrainingArguments(
             output_dir=output_dir,
             evaluation_strategy='epoch',
             save_strategy='epoch',
             learning_rate=5e-5,
-            per_device_train_batch_size=2,
-            per_device_eval_batch_size=2,
-            num_train_epochs=3,
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
+            num_train_epochs=1,
             weight_decay=0.01,
             logging_dir=f'{output_dir}/logs',
-            logging_steps=100,
+            logging_steps=50,
             save_total_limit=1,
             predict_with_generate=True,
             report_to='none',
             push_to_hub=False
         )
 
-        # Normal Loss Training
-        print(f'\nTraining {model_name} with normal loss...')
+        # Normal loss training
         trainer_normal = PrivacyAwareTrainer(
             penalty=False,
             model=model,
@@ -179,27 +178,9 @@ for dataset_name in datasets_info:
             compute_metrics=compute_metrics,
         )
 
+        print(f'\nTraining {model_name} (normal loss)...')
         trainer_normal.train()
         trainer_normal.save_model(os.path.join(output_dir, 'normal-loss-final'))
 
-        eval_normal = trainer_normal.evaluate(ignore_keys=['span_labels'])
-        print(f'Normal loss accuracy on {dataset_name} with {model_name}: {eval_normal["eval_accuracy"]:.4f}')
-
-        # Penalized Loss Training
-        print(f'\nTraining {model_name} with penalized loss...')
-        trainer_penalty = PrivacyAwareTrainer(
-            penalty=True,
-            model=model,
-            args=training_args,
-            train_dataset=tokenized_train,
-            eval_dataset=tokenized_test,
-            tokenizer=tokenizer,
-            data_collator=custom_data_collator,
-            compute_metrics=compute_metrics,
-        )
-
-        trainer_penalty.train()
-        trainer_penalty.save_model(os.path.join(output_dir, 'penalized-loss-final'))
-
-        eval_penalty = trainer_penalty.evaluate(ignore_keys=['span_labels'])
-        print(f'Penalized loss accuracy on {dataset_name} with {model_name}: {eval_penalty["eval_accuracy"]:.4f}')
+        eval_normal = trainer_normal.evaluate()
+        print(f'Normal loss accuracy: {eval_normal["eval_accuracy"]:.4f}')
