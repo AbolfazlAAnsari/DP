@@ -1,13 +1,22 @@
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainer, Seq2SeqTrainingArguments
+import os
+import torch
+import numpy as np
+from torch import nn
 from datasets import load_dataset
 from evaluate import load as load_metric
-from transformers import default_data_collator
-from torch import nn
-import numpy as np
-import torch
-import os
+from transformers import (
+    AutoTokenizer, 
+    AutoModelForSeq2SeqLM, 
+    Seq2SeqTrainer, 
+    Seq2SeqTrainingArguments, 
+    default_data_collator
+)
 
-# Models to fine-tune
+# Check for GPU
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using device: {device}')
+
+# Models and datasets
 model_names = [
     't5-small',
     't5-base',
@@ -15,13 +24,12 @@ model_names = [
     'facebook/bart-base',
 ]
 
-# Datasets to fine-tune on
 datasets_info = [
     'pii-masking-400k',
     'open-pii-masking-500k-ai4privacy'
 ]
 
-# Preprocessing function
+# Preprocessing
 def get_preprocessor(tokenizer):
     def preprocess(example):
         input_text = 'Mask sensitive information: ' + example['source_text']
@@ -35,7 +43,6 @@ def get_preprocessor(tokenizer):
             return_offsets_mapping=True
         )
         offset_mapping = input_enc.pop('offset_mapping')
-        input_ids = input_enc['input_ids']
 
         target_enc = tokenizer(
             target_text,
@@ -58,8 +65,7 @@ def get_preprocessor(tokenizer):
                     break
                 if token_end <= start:
                     continue
-                if token_start < end and token_end > start:
-                    span_mask[i] = 1
+                span_mask[i] = 1
 
         return {
             'input_ids': input_enc['input_ids'],
@@ -69,7 +75,7 @@ def get_preprocessor(tokenizer):
         }
     return preprocess
 
-# Custom collator
+# Data Collator
 def custom_data_collator(features):
     for f in features:
         if 'span_labels' not in f:
@@ -78,12 +84,13 @@ def custom_data_collator(features):
     batch['span_labels'] = torch.tensor([f['span_labels'] for f in features])
     return batch
 
+# Custom Trainer
 class PrivacyAwareTrainer(Seq2SeqTrainer):
     def __init__(self, penalty=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.penalty = penalty
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs['labels']
         span_labels = inputs['span_labels'].to(labels.device)
         outputs = model(
@@ -93,7 +100,7 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         )
         logits = outputs.logits
 
-        # Shift logits and labels
+        # Shift logits/labels for loss calculation
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
@@ -111,6 +118,7 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
             base_loss += penalty_weight * penalty_term
 
         return (base_loss, outputs) if return_outputs else base_loss
+
 # Main training loop
 for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
@@ -123,7 +131,7 @@ for dataset_name in datasets_info:
         print(f'\nFine-tuning model: {model_name} on dataset: {dataset_name}')
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model_init = lambda: AutoModelForSeq2SeqLM.from_pretrained(model_name)  # model re-init function
+        model_init = lambda: AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
 
         preprocessor = get_preprocessor(tokenizer)
         tokenized_train = train_test['train'].map(preprocessor, remove_columns=train_test['train'].column_names)
@@ -144,10 +152,10 @@ for dataset_name in datasets_info:
             save_steps=500,
             predict_with_generate=True,
             evaluation_strategy='epoch',
-            report_to='none'
+            report_to='none',
+            fp16=True if device.type == 'cuda' else False,  # Enable mixed precision for faster training if GPU
         )
 
-        # Define compute_metrics inside the loop to access tokenizer
         def compute_metrics(eval_pred):
             preds, labels = eval_pred
             preds = np.argmax(preds, axis=-1)
@@ -156,8 +164,8 @@ for dataset_name in datasets_info:
             correct = sum(pred.strip() == label.strip() for pred, label in zip(decoded_preds, decoded_labels))
             return {'accuracy': correct / len(decoded_preds)}
 
-        # Scenario 1: Normal loss
-        print(f'Fine-tuning with normal loss for {model_name} on {dataset_name}')
+        # Fine-tune with normal loss
+        print(f'Fine-tuning with normal loss...')
         trainer_normal = PrivacyAwareTrainer(
             penalty=False,
             model=model_init(),
@@ -174,8 +182,8 @@ for dataset_name in datasets_info:
         eval_normal = trainer_normal.evaluate()
         print(f'Accuracy (normal loss): {eval_normal["eval_accuracy"]:.4f}')
 
-        # Scenario 2: Penalized loss
-        print(f'Fine-tuning with penalty for {model_name} on {dataset_name}')
+        # Fine-tune with penalized loss
+        print(f'Fine-tuning with penalized loss...')
         trainer_penalized = PrivacyAwareTrainer(
             penalty=True,
             model=model_init(),  # fresh model
