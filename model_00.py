@@ -157,7 +157,8 @@ for dataset_name in datasets_info:
             eval_dataset=tokenized_test,
             tokenizer=tokenizer,
             data_collator=custom_data_collator,
-            compute_metrics=compute_metrics
+            compute_metrics=compute_metrics,
+            ignore_keys_for_eval=['span_labels']  # Ignore span_labels during evaluation
         )
         
         trainer_normal_loss.train()
@@ -176,7 +177,8 @@ for dataset_name in datasets_info:
             eval_dataset=tokenized_test,
             tokenizer=tokenizer,
             data_collator=custom_data_collator,
-            compute_metrics=compute_metrics
+            compute_metrics=compute_metrics,
+            ignore_keys_for_eval=['span_labels']  # Ignore span_labels during evaluation
         )
         
         trainer_penalized_loss.train()
