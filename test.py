@@ -7,7 +7,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 pretrained_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 # 2. Load the fine-tuned model (based on the English dataset)
-fine_tuned_model_path = '/Users/abolfazlansari/Documents/Pike/Code/DP/DP/results-pii-masking-400k-t5-small-full/checkpoint-1500'
+fine_tuned_model_path = '/Users/abolfazlansari/Documents/Pike/Code/DP/DP/results-pii-masking-400k-t5-small-full/checkpoint-450'
 fine_tuned_model = AutoModelForSeq2SeqLM.from_pretrained(fine_tuned_model_path)
 
 # 3. Function to make predictions using the model
@@ -21,8 +21,12 @@ def predict(model, sentence):
     return decoded_output
 
 # 4. Test sentence
-test_sentence = "My name is John Doe and I'm very interested in volyball!"
-# 5. Make predictions with the pre-trained model
+test_sentence = """Student: Matjan Großmann
+DOB: 15th January 2020
+Emergency Contact: Master Matjan Großmann
+Email: matjan.großmann@gmail.com
+Address: 1759 Station 522, United States
+Coordinates: [33.28061, -111.752]"""
 pretrained_prediction = predict(pretrained_model, test_sentence)
 print("Pre-trained model prediction:", pretrained_prediction)
 

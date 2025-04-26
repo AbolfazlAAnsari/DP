@@ -117,7 +117,6 @@ for dataset_name in datasets_info:
     dataset = load_dataset(f'ai4privacy/{dataset_name}')
     # use 2000 examples for training and testeing
     english_dataset = dataset['train'].filter(lambda x: x['language'] == 'en')
-    english_dataset = english_dataset.select(range(5000))
     train_test = english_dataset.train_test_split(test_size=0.1, seed=42)
     
     for model_name in model_names:
@@ -145,7 +144,7 @@ for dataset_name in datasets_info:
             learning_rate=5e-5,
             per_device_train_batch_size=2,
             per_device_eval_batch_size=2,
-            num_train_epochs=3,
+            num_train_epochs=4,
             weight_decay=0.01,
             logging_dir=f'{output_dir}/logs',
             logging_steps=100,
