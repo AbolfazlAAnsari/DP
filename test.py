@@ -7,7 +7,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 pretrained_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 # 2. Load the fine-tuned model (based on the English dataset)
-fine_tuned_model_path = '/Users/abolfazlansari/Documents/Pike/Code/DPProject/results-pii-masking-400k-facebook-bart-base-1000/checkpoint-500'
+fine_tuned_model_path = '/Users/abolfazlansari/Documents/Pike/Code/DP/DP/results-pii-masking-400k-t5-small-full/checkpoint-1500'
 fine_tuned_model = AutoModelForSeq2SeqLM.from_pretrained(fine_tuned_model_path)
 
 # 3. Function to make predictions using the model

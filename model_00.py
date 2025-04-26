@@ -77,47 +77,47 @@ def compute_metrics(eval_pred):
     accuracy = correct / len(decoded_preds)
     return {'accuracy': accuracy}
 
-# Custom Trainer with optional penalty in the loss function
 class PrivacyAwareTrainer(Seq2SeqTrainer):
     def __init__(self, penalty=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.penalty = penalty  # Add penalty flag
+        self.penalty = penalty
 
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs['labels']
         span_labels = inputs['span_labels'].to(labels.device)
         outputs = model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'], labels=labels)
         logits = outputs.logits
 
-        # Shift logits and labels for proper loss calculation
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
 
-        # Cross-entropy loss
         loss_fct = nn.CrossEntropyLoss(reduction='none', ignore_index=-100)
         loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         loss = loss.view(shift_labels.size())
 
-        # Active tokens to ignore padding in the loss calculation
         active_tokens = (shift_labels != -100).float()
         final_loss = (loss * active_tokens).sum() / active_tokens.sum()
 
-        # Apply penalty to the loss if the flag is set
         if self.penalty:
-            penalty_weight = 5.0  # Set your desired penalty weight
+            penalty_weight = 5.0
             penalty_term = (penalty_weight * shift_span.float()).sum()
             final_loss = final_loss + penalty_term
 
         return (final_loss, outputs) if return_outputs else final_loss
+
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        # REMOVE 'span_labels' before calling model.generate()
+        inputs = {k: v for k, v in inputs.items() if k != 'span_labels'}
+        return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
 
 # Main loop to handle both normal loss and penalized loss
 for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
     dataset = load_dataset(f'ai4privacy/{dataset_name}')
     # use 2000 examples for training and testeing
-    dataset = dataset['train'].shuffle(seed=42).select(range(2000))
     english_dataset = dataset['train'].filter(lambda x: x['language'] == 'en')
+    english_dataset = english_dataset.select(range(5000))
     train_test = english_dataset.train_test_split(test_size=0.1, seed=42)
     
     for model_name in model_names:
@@ -125,6 +125,14 @@ for dataset_name in datasets_info:
         
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+        elif torch.backends.mps.is_available():
+            device = torch.device('mps')
+        else:
+            device = torch.device('cpu')
+        print(f'Using device: {device}')
 
         preprocessor = get_preprocessor(tokenizer)
         tokenized_train = train_test['train'].map(preprocessor, remove_columns=train_test['train'].column_names)
