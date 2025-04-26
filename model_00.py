@@ -81,7 +81,7 @@ def compute_metrics(eval_pred):
 class PrivacyAwareTrainer(Seq2SeqTrainer):
     def __init__(self, penalty=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.penalty = penalty  # Add penalty flag
+        self.penalty = penalty
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs['labels']
@@ -89,23 +89,19 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         outputs = model(input_ids=inputs['input_ids'], attention_mask=inputs['attention_mask'], labels=labels)
         logits = outputs.logits
 
-        # Shift logits and labels for proper loss calculation
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
 
-        # Cross-entropy loss
         loss_fct = nn.CrossEntropyLoss(reduction='none', ignore_index=-100)
         loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         loss = loss.view(shift_labels.size())
 
-        # Active tokens to ignore padding in the loss calculation
         active_tokens = (shift_labels != -100).float()
         final_loss = (loss * active_tokens).sum() / active_tokens.sum()
 
-        # Apply penalty to the loss if the flag is set
         if self.penalty:
-            penalty_weight = 5.0  # Set your desired penalty weight
+            penalty_weight = 5.0
             penalty_term = (penalty_weight * shift_span.float()).sum()
             final_loss = final_loss + penalty_term
 
@@ -116,6 +112,9 @@ for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
     dataset = load_dataset(f'ai4privacy/{dataset_name}')
     english_dataset = dataset['train'].filter(lambda x: x['language'] == 'en')
+
+    # === Change 1: Only select 200 samples for fast debugging ===
+    english_dataset = english_dataset.select(range(min(200, len(english_dataset))))
 
     train_test = english_dataset.train_test_split(test_size=0.1, seed=42)
     
@@ -129,19 +128,19 @@ for dataset_name in datasets_info:
         tokenized_train = train_test['train'].map(preprocessor, remove_columns=train_test['train'].column_names)
         tokenized_test = train_test['test'].map(preprocessor, remove_columns=train_test['test'].column_names)
 
-        output_dir = f'./results-{dataset_name}-{model_name.replace("/", "-")}-full'
+        output_dir = f'./results-{dataset_name}-{model_name.replace("/", "-")}-debug-200'
 
         training_args = Seq2SeqTrainingArguments(
             output_dir=output_dir,
             learning_rate=5e-5,
-            per_device_train_batch_size=2,
-            per_device_eval_batch_size=2,
-            num_train_epochs=3,
+            per_device_train_batch_size=4,  # faster since smaller data
+            per_device_eval_batch_size=4,
+            num_train_epochs=1,  # === Change 2: Only 1 epoch for quick test ===
             weight_decay=0.01,
             logging_dir=f'{output_dir}/logs',
-            logging_steps=100,
+            logging_steps=10,
             save_total_limit=1,
-            save_steps=500,
+            save_steps=50,
             predict_with_generate=True,
             evaluation_strategy='epoch',
             report_to='none'
@@ -150,7 +149,7 @@ for dataset_name in datasets_info:
         # Scenario 1: Fine-tuning with normal loss
         print(f'Fine-tuning with normal loss for {model_name} on dataset {dataset_name}')
         trainer_normal_loss = PrivacyAwareTrainer(
-            penalty=False,  # No penalty for normal loss
+            penalty=False,
             model=model,
             args=training_args,
             train_dataset=tokenized_train,
@@ -169,7 +168,7 @@ for dataset_name in datasets_info:
         # Scenario 2: Fine-tuning with penalty on loss
         print(f'Fine-tuning with penalty on loss for {model_name} on dataset {dataset_name}')
         trainer_penalized_loss = PrivacyAwareTrainer(
-            penalty=True,  # Penalty applied in the loss function
+            penalty=True,
             model=model,
             args=training_args,
             train_dataset=tokenized_train,
