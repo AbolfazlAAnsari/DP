@@ -177,13 +177,12 @@ for dataset_name in datasets_info:
             tokenizer=tokenizer,
             data_collator=custom_data_collator,
             compute_metrics=compute_metrics,
-            ignore_keys_for_eval=['span_labels'],
         )
 
         trainer_normal.train()
         trainer_normal.save_model(os.path.join(output_dir, 'normal-loss-final'))
 
-        eval_normal = trainer_normal.evaluate()
+        eval_normal = trainer_normal.evaluate(ignore_keys=['span_labels'])
         print(f'Normal loss accuracy on {dataset_name} with {model_name}: {eval_normal["eval_accuracy"]:.4f}')
 
         # Penalized Loss Training
@@ -197,11 +196,10 @@ for dataset_name in datasets_info:
             tokenizer=tokenizer,
             data_collator=custom_data_collator,
             compute_metrics=compute_metrics,
-            ignore_keys_for_eval=['span_labels'],
         )
 
         trainer_penalty.train()
         trainer_penalty.save_model(os.path.join(output_dir, 'penalized-loss-final'))
 
-        eval_penalty = trainer_penalty.evaluate()
+        eval_penalty = trainer_penalty.evaluate(ignore_keys=['span_labels'])
         print(f'Penalized loss accuracy on {dataset_name} with {model_name}: {eval_penalty["eval_accuracy"]:.4f}')
