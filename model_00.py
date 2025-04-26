@@ -100,7 +100,7 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
         )
         logits = outputs.logits
 
-        # Shift logits/labels for loss calculation
+        # Shift logits and labels
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         shift_span = span_labels[..., 1:].contiguous()
