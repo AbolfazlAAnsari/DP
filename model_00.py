@@ -78,13 +78,12 @@ def custom_data_collator(features):
     batch['span_labels'] = torch.tensor([f['span_labels'] for f in features])
     return batch
 
-# Custom Trainer with optional penalty
 class PrivacyAwareTrainer(Seq2SeqTrainer):
     def __init__(self, penalty=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.penalty = penalty
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs['labels']
         span_labels = inputs['span_labels'].to(labels.device)
         outputs = model(
@@ -112,7 +111,6 @@ class PrivacyAwareTrainer(Seq2SeqTrainer):
             base_loss += penalty_weight * penalty_term
 
         return (base_loss, outputs) if return_outputs else base_loss
-
 # Main training loop
 for dataset_name in datasets_info:
     print(f'\nLoading dataset: {dataset_name}')
