@@ -19,7 +19,7 @@ dataset = load_dataset('ai4privacy/pii-masking-65k')
 def get_preprocessor(tokenizer):
     def preprocess(example):
         # Input: unmasked text
-        input_text = 'Mask sensitive information: ' + example['unmasked_text']
+        input_text = 'Mask sensitive information: ' + ' '.join(example['unmasked_text'])
         
         # Target: masked text
         target_text = example['masked_text']
