@@ -11,10 +11,10 @@ import os
 
 # Models to fine-tune
 model_names = [
-    't5-small',
+    # 't5-small',
     't5-base',
     'google/flan-t5-base',
-    'facebook/bart-base',
+    # 'facebook/bart-base',
 ]
 
 # Datasets to fine-tune on
