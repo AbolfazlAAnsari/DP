@@ -12,7 +12,7 @@ import os
 # Models to fine-tune
 model_names = [
     # 't5-small',
-    't5-base',
+    # 't5-base',
     'google/flan-t5-base',
     # 'facebook/bart-base',
 ]
