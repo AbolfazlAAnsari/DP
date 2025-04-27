@@ -19,7 +19,7 @@ model_names = [
 
 # Datasets to fine-tune on
 datasets_info = [
-    'pii-masking-65k',
+    'pii-masking-43k',
 ]
 
 # Preprocessing function
