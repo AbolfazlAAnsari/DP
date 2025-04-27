@@ -11,8 +11,8 @@ import os
 
 # Models to fine-tune
 model_names = [
-    # 't5-small',
-    # 't5-base',
+    't5-small',
+    't5-base',
     'google/flan-t5-base',
 ]
 
@@ -123,7 +123,7 @@ for model_name in model_names:
         learning_rate=5e-5,
         per_device_train_batch_size=2,
         per_device_eval_batch_size=2,
-        num_train_epochs=4,
+        num_train_epochs=10,
         weight_decay=0.01,
         logging_dir=f'{output_dir}/logs',
         logging_steps=100,
