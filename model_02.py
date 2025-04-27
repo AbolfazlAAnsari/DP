@@ -20,6 +20,9 @@ model_names = [
 # Load the dataset
 dataset = load_dataset('ai4privacy/pii-masking-65k')
 
+# Manually split the training set
+split_dataset = dataset['train'].train_test_split(test_size=0.1)
+
 # Preprocessing function
 def get_preprocessor(tokenizer):
     def preprocess(example):
@@ -55,13 +58,13 @@ def get_preprocessor(tokenizer):
         }
     return preprocess
 
-# Example: Fine-tune one model
+# Fine-tune one model
 model_checkpoint = 't5-small'
 tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_checkpoint)
 
-# Preprocess dataset
-processed_dataset = dataset.map(
+# Preprocess the split dataset
+processed_dataset = split_dataset.map(
     get_preprocessor(tokenizer),
     batched=True,
     remove_columns=dataset['train'].column_names,
@@ -91,7 +94,7 @@ trainer = Seq2SeqTrainer(
     model=model,
     args=training_args,
     train_dataset=processed_dataset['train'],
-    eval_dataset=processed_dataset['validation'],
+    eval_dataset=processed_dataset['test'],  # Use 'test' as validation split
     tokenizer=tokenizer,
     data_collator=default_data_collator,
 )
