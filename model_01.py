@@ -14,10 +14,10 @@ local_dataset_path = './data/Contextual_PII_Masking_Dataset.csv'
 
 # Models to fine-tune
 model_names = [
-    't5-small',
-    't5-base',
+    # 't5-small',
+    # 't5-base',
     'google/flan-t5-base',
-    'facebook/bart-base',
+    # 'facebook/bart-base',
 ]
 
 # Preprocessing function
@@ -186,3 +186,4 @@ for model_name in model_names:
 
     eval_results_penalized = trainer_penalized_loss.evaluate()
     print(f'Accuracy with penalized loss: {eval_results_penalized["eval_accuracy"]:.4f}')
+
