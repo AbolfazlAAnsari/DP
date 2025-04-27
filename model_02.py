@@ -1,10 +1,15 @@
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainer, Seq2SeqTrainingArguments
-from datasets import load_dataset, DatasetDict
-from transformers import default_data_collator
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSeq2SeqLM,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
+    default_data_collator
+)
+from datasets import load_dataset
 import numpy as np
 import os
 
-# Models to fine-tune
+# Model names to fine-tune
 model_names = [
     't5-small',
     't5-base',
@@ -18,39 +23,39 @@ dataset = load_dataset('ai4privacy/pii-masking-65k')
 # Preprocessing function
 def get_preprocessor(tokenizer):
     def preprocess(example):
-        # Input: unmasked text
-        input_text = 'Mask sensitive information: ' + ' '.join(example['unmasked_text'])
-        
-        # Target: masked text
+        input_text = example['unmasked_text']
+        if isinstance(input_text, list):
+            input_text = ' '.join(input_text)
+
         target_text = example['masked_text']
-        
-        # Tokenize inputs and targets
-        input_enc = tokenizer(
-            input_text, 
-            truncation=True, 
-            padding='max_length', 
+        if isinstance(target_text, list):
+            target_text = ' '.join(target_text)
+
+        inputs = tokenizer(
+            'Mask sensitive information: ' + input_text,
+            truncation=True,
+            padding='max_length',
             max_length=512
         )
-        
-        target_enc = tokenizer(
-            target_text, 
-            truncation=True, 
-            padding='max_length', 
+
+        targets = tokenizer(
+            target_text,
+            truncation=True,
+            padding='max_length',
             max_length=512
         )
-        
-        # Prepare labels (set padding tokens to -100)
-        labels = target_enc['input_ids']
+
+        labels = targets['input_ids']
         labels = [l if l != tokenizer.pad_token_id else -100 for l in labels]
-        
+
         return {
-            'input_ids': input_enc['input_ids'],
-            'attention_mask': input_enc['attention_mask'],
+            'input_ids': inputs['input_ids'],
+            'attention_mask': inputs['attention_mask'],
             'labels': labels
         }
     return preprocess
 
-# Example: fine-tune one model
+# Example: Fine-tune one model
 model_checkpoint = 't5-small'
 tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_checkpoint)
@@ -59,10 +64,11 @@ model = AutoModelForSeq2SeqLM.from_pretrained(model_checkpoint)
 processed_dataset = dataset.map(
     get_preprocessor(tokenizer),
     batched=True,
-    remove_columns=dataset['train'].column_names, # remove original columns
+    remove_columns=dataset['train'].column_names,
+    desc='Tokenizing dataset',
 )
 
-# Training arguments
+# Define training arguments
 training_args = Seq2SeqTrainingArguments(
     output_dir=f'./results/{model_checkpoint}',
     evaluation_strategy='epoch',
@@ -80,7 +86,7 @@ training_args = Seq2SeqTrainingArguments(
     report_to='none'
 )
 
-# Trainer
+# Define Trainer
 trainer = Seq2SeqTrainer(
     model=model,
     args=training_args,
@@ -90,5 +96,5 @@ trainer = Seq2SeqTrainer(
     data_collator=default_data_collator,
 )
 
-# Train
+# Start training
 trainer.train()
